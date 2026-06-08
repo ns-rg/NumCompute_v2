@@ -1,6 +1,6 @@
-**NumCompute Stream** : A modular, streaming-compatible ensemble tree-based machine learning framework using plain Python + NumPy
+**NumCompute Stream** : A modular, streaming-compatible ensemble tree-based machine learning framework using plain Python + NumPy. 
 
-**Project Goal** : To extend the NumCompute package by building a decision tree-based ML framework supporting incremental learning, model ensembling, and real-time visualisation without external ML libraries.
+This package extends the NumCompute package by building a decision tree-based ML framework supporting incremental learning, model ensembling, and real-time visualisation without external ML libraries.
 
 **Features Includes :**
 
@@ -54,9 +54,9 @@ Compare vectorised vs loop implementations with timing utilities
 
 **Installation**
 
-    git clone <your-repo-link>
+    git clone https://github.com/ns-rg/NumCompute_v2.git
     cd NumCompute_v2
-    pip install -e .
+    pip install -e
 
 **Quick Start**
 Run the demo notebook:
@@ -68,30 +68,33 @@ Run the demo notebook:
 
 1. Streaming Trainer Example
 
+    ```py
     from numcompute_stream.tree import DecisionTreeClassifier
     from numcompute_stream.stream import StreamTrainer
-
+    
     model = DecisionTreeClassifier(max_depth=5)
     trainer = StreamTrainer(model=model)
     trainer.fit_chunk(X_chunk, y_chunk)
     print(trainer.get_logs())
+    ```
 
 2. Ensemble Example
 
+    ```py
     from numcompute_stream.ensemble import EnsembleClassifier
 
     clf = EnsembleClassifier(n_trees=10, method="random_forest")
     clf.partial_fit(X_chunk, y_chunk)
     predictions = clf.predict(X_new)
-
+    ```
 3. StreamMetrics Example
-
+	```py
     from numcompute_stream.metrics import StreamMetrics
 
     sm = StreamMetrics()
     sm.update(y_true_chunk, y_pred_chunk)
     print(sm.result())
-
+    ```
 **Performance**
 
     Operation                       Time
@@ -112,7 +115,7 @@ Run the demo notebook:
 Comprehensive unit tests (30+ cases) covering original and streaming functionality.
 
 Run original tests:
-
+		
     py -m tests.original.test_stats
     py -m tests.original.test_metrics
     py -m tests.original.test_preprocessing
