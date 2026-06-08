@@ -8,7 +8,7 @@ This package extends the NumCompute package by building a decision tree-based ML
 CSV reader with missing value handling and flexible dtype support
 
 2. **Preprocessing (preprocessing.py)**
-Imputer, StandardScaler, OneHotEncoder — all with partial_fit() for streaming
+Imputer, StandardScaler, OneHotEncoder : all with partial_fit() for streaming
 
 3. **Statistics (stats.py)**
 Mean, Std, Min, Max, Histogram, Quantiles (NaN-safe)
