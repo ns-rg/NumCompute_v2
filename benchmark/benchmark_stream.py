@@ -100,8 +100,46 @@ def benchmark_bagging_vs_random_forest():
     print(f"Random Forest : {rf_time:.4f}s avg over 5 runs")
     print()
 
+def benchmark_loop_vs_vectorised():
+    """
+    Compare loop-based vs vectorised implementations for mean and std
+    to validate the vectorisation-first design choice.
+    """
+    from numcompute_stream.stats import mean, mean_loop, std, std_loop
+
+    X, _ = generate_data(n_samples=100000, n_features=1)
+    col = X[:, 0]
+
+    def run_mean_vectorised():
+        mean(col)
+
+    def run_mean_loop():
+        mean_loop(col)
+
+    def run_std_vectorised():
+        std(col)
+
+    def run_std_loop():
+        std_loop(col)
+
+    mean_vec_time = time_function(run_mean_vectorised, repeat=5)
+    mean_loop_time = time_function(run_mean_loop, repeat=5)
+    std_vec_time = time_function(run_std_vectorised, repeat=5)
+    std_loop_time = time_function(run_std_loop, repeat=5)
+
+    print("=== Loop vs Vectorised (100k samples) ===")
+    print(f"Mean vectorised : {mean_vec_time:.6f}s avg over 5 runs")
+    print(f"Mean loop       : {mean_loop_time:.6f}s avg over 5 runs")
+    print(f"Speedup         : {mean_loop_time / mean_vec_time:.2f}x")
+    print()
+    print(f"Std vectorised  : {std_vec_time:.6f}s avg over 5 runs")
+    print(f"Std loop        : {std_loop_time:.6f}s avg over 5 runs")
+    print(f"Speedup         : {std_loop_time / std_vec_time:.2f}x")
+    print()
+
 
 if __name__ == "__main__":
     benchmark_tree_vs_ensemble()
     benchmark_partial_fit_vs_fit()
+    benchmark_loop_vs_vectorised()
     benchmark_bagging_vs_random_forest()
