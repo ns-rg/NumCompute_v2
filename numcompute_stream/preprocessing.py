@@ -62,6 +62,10 @@ class Imputer:
         n_features = X.shape[1]
 
         self.statistics_ = []
+        self._numeric_mask = []
+        self._counts = []
+        self._sums = []
+        self._cat_counts = []
 
         for j in range(n_features):
             col = X[:, j]
@@ -71,15 +75,20 @@ class Imputer:
                 for val in col:
                     try:
                         col_float.append(float(val))
-                    except NotImplementedError:
+                    except (ValueError, TypeError):
                         col_float.append(np.nan)
 
                 col_float = np.array(col_float, dtype=float)
+                valid = col_float[~np.isnan(col_float)]
 
                 if self.strategy == "mean":
                     stat = np.nanmean(col_float)
-                else:
-                    stat = np.nanmean(col_float)
+
+                self._numeric_mask.append(True)
+                self._counts.append(float(len(valid)))
+                self._sums.append(float(np.sum(valid)))
+                self._cat_counts.append({})
+                self.statistics_.append(stat)
 
             else:
                 col_clean = [val for val in col if val not in (np.nan, "", b"", None)]
@@ -90,7 +99,60 @@ class Imputer:
                     values, counts = np.unique(col_clean, return_counts=True)
                     stat = values[np.argmax(counts)]
 
-            self.statistics_.append(stat)
+                cat_counts = {}
+                for val in col_clean:
+                    cat_counts[val] = cat_counts.get(val, 0) + 1
+
+                self._numeric_mask.append(False)
+                self._counts.append(0.0)
+                self._sums.append(0.0)
+                self._cat_counts.append(cat_counts)
+                self.statistics_.append(stat)
+
+        return self
+
+    def partial_fit(self, X):
+        """
+        Update imputation statistics incrementally with a new chunk.
+        For numeric columns, updates running mean.
+        For categorical columns, updates running mode.
+        Parameters:
+        - X: 2D array-like, the new chunk of data
+        Returns:
+        - self
+        Raises:
+        - ValueError: If X is empty or not 2D.
+        """
+        X = np.array(X, dtype=object)
+
+        if self.statistics_ is None:
+            return self.fit(X)
+
+        for j in range(X.shape[1]):
+            col = X[:, j]
+
+            if self._numeric_mask[j]:
+                for val in col:
+                    try:
+                        f = float(val)
+                        if not np.isnan(f):
+                            self._counts[j] += 1
+                            self._sums[j] += f
+                    except (ValueError, TypeError):
+                        pass
+
+                if self._counts[j] > 0:
+                    self.statistics_[j] = self._sums[j] / self._counts[j]
+
+            else:
+                col_clean = [val for val in col if val not in (np.nan, "", b"", None)]
+                for val in col_clean:
+                    self._cat_counts[j][val] = self._cat_counts[j].get(val, 0) + 1
+
+                if self._cat_counts[j]:
+                    self.statistics_[j] = max(
+                        self._cat_counts[j], key=self._cat_counts[j].get
+                    )
 
         return self
 
@@ -146,6 +208,9 @@ class StandardScaler:
         self.mean_ = None
         self.std_ = None
         self.numeric_mask_ = None
+        self._n = None
+        self._welford_mean = None
+        self._M2 = None
 
     def _is_numeric(self, col):
         """
@@ -196,6 +261,10 @@ class StandardScaler:
         means = []
         stds = []
 
+        self._n = np.zeros(n_features, dtype=float)
+        self._welford_mean = np.zeros(n_features, dtype=float)
+        self._M2 = np.zeros(n_features, dtype=float)
+
         for j in range(n_features):
             col = X[:, j]
 
@@ -211,6 +280,15 @@ class StandardScaler:
                 numeric_mask.append(True)
                 means.append(mean)
                 stds.append(std)
+
+                valid = col_float[~np.isnan(col_float)]
+                for x in valid:
+                    self._n[j] += 1
+                    delta = x - self._welford_mean[j]
+                    self._welford_mean[j] += delta / self._n[j]
+                    delta2 = x - self._welford_mean[j]
+                    self._M2[j] += delta * delta2
+
             else:
                 numeric_mask.append(False)
                 means.append(None)
@@ -219,6 +297,49 @@ class StandardScaler:
         self.numeric_mask_ = numeric_mask
         self.mean_ = means
         self.std_ = stds
+
+        return self
+
+    def partial_fit(self, X, y=None):
+        """
+        Update mean and std incrementally using Welford's algorithm.
+        Parameters:
+        - X: 2D array-like, the new chunk of data
+        - y: Ignored, present for API consistency by convention.
+        Returns:
+        - self
+        Raises:
+        - ValueError: If X is empty or not 2D.
+        """
+        X = np.array(X, dtype=object)
+
+        if self.numeric_mask_ is None:
+            return self.fit(X)
+
+        n_features = X.shape[1]
+
+        for j in range(n_features):
+            if not self.numeric_mask_[j]:
+                continue
+
+            col = np.array(
+                [float(x) if x not in ("", b"", None) else np.nan for x in X[:, j]],
+                dtype=float,
+            )
+            valid = col[~np.isnan(col)]
+
+            for x in valid:
+                self._n[j] += 1
+                delta = x - self._welford_mean[j]
+                self._welford_mean[j] += delta / self._n[j]
+                delta2 = x - self._welford_mean[j]
+                self._M2[j] += delta * delta2
+
+            self.mean_[j] = self._welford_mean[j]
+
+            if self._n[j] > 1:
+                variance = self._M2[j] / (self._n[j] - 1)
+                self.std_[j] = np.sqrt(variance) if variance > 0 else 1.0
 
         return self
 
@@ -326,10 +447,40 @@ class OneHotEncoder:
                 col_clean = [v for v in col if v not in ("", b"", None)]
 
                 categories = np.unique(col_clean)
-                self.categories_.append(categories)
+                self.categories_.append(list(categories))
             else:
                 self.categorical_mask_.append(False)
                 self.categories_.append(None)
+
+        return self
+
+    def partial_fit(self, X):
+        """
+        Update known categories incrementally with a new chunk.
+        New unseen categories are added to the existing set.
+        Parameters:
+        - X: 2D array-like, the new chunk of data
+        Returns:
+        - self
+        Raises:
+        - ValueError: If X is empty or not 2D.
+        """
+        X = np.array(X, dtype=object)
+
+        if self.categories_ is None:
+            return self.fit(X)
+
+        for j in range(X.shape[1]):
+            if not self.categorical_mask_[j]:
+                continue
+
+            col = X[:, j]
+            col_clean = [v for v in col if v not in ("", b"", None)]
+
+            for val in col_clean:
+                if val not in self.categories_[j]:
+                    self.categories_[j].append(val)
+                    self.categories_[j] = sorted(self.categories_[j])
 
         return self
 
@@ -360,7 +511,7 @@ class OneHotEncoder:
 
                 for i, val in enumerate(col):
                     if val in categories:
-                        idx = np.where(categories == val)[0][0]
+                        idx = categories.index(val)
                         one_hot[i, idx] = 1
 
                 output_cols.append(one_hot)
