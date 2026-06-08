@@ -1,5 +1,5 @@
 import numpy as np
-from numcompute.metrics import (
+from numcompute_stream.metrics import (
     accuracy,
     confusion_matrix,
     precision,

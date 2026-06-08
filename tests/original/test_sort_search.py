@@ -1,5 +1,5 @@
-from numcompute.sort_search import topk
-from numcompute.sort_search import binary_search
+from numcompute_stream.sort_search import topk
+from numcompute_stream.sort_search import binary_search
 import numpy as np
 
 def test_topk():

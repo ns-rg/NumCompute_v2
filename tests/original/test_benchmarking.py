@@ -1,5 +1,5 @@
 import numpy as np
-from numcompute.benchmarking import benchmark
+from numcompute_stream.benchmarking import benchmark
 
 def loop_sum(x):
     """

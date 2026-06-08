@@ -1,5 +1,5 @@
 import numpy as np
-from numcompute.rank import percentile
+from numcompute_stream.rank import percentile
 
 def mean(X, axis=None):
     """
@@ -165,3 +165,154 @@ def quantile(X, q):
         return percentile(X, q * 100)
     else:
         return np.array([percentile(X, qi * 100) for qi in q])
+    
+class StreamStats:
+    """
+    Compute statistics incrementally over chunks of data using Welford's
+    online algorithm for numerical stability.
+
+    Supports per-feature mean, variance, min, max, histogram, and quantile
+    estimates updated chunk by chunk.
+
+    Optionally operates in sliding-window mode, keeping only the last
+    window_size samples per feature.
+
+    Example usage:
+    ss = StreamStats(n_features=3)
+    ss.update_stats(X_chunk)
+    print(ss.result())
+    """
+
+    def __init__(self, n_features, window_size=None, bins=10):
+        """
+        Initialise StreamStats.
+        Parameters:
+        - n_features: int, number of features (columns) expected in each chunk
+        - window_size: int or None. If set, only the last window_size samples
+          are retained for quantile and histogram estimates.
+        - bins: int, number of histogram bins.
+        Raises:
+        - ValueError: If n_features < 1 or window_size < 1.
+        """
+        if n_features < 1:
+            raise ValueError("n_features must be at least 1.")
+        if window_size is not None and window_size < 1:
+            raise ValueError("window_size must be at least 1.")
+
+        self.n_features = n_features
+        self.window_size = window_size
+        self.bins = bins
+
+        self._n = np.zeros(n_features, dtype=float)
+        self._mean = np.zeros(n_features, dtype=float)
+        self._M2 = np.zeros(n_features, dtype=float)
+        self._min = np.full(n_features, np.inf)
+        self._max = np.full(n_features, -np.inf)
+        self._buffer = [[] for _ in range(n_features)]
+
+    def update_stats(self, X_chunk):
+        """
+        Ingest a new chunk and update all running statistics.
+        Parameters:
+        - X_chunk: array-like of shape (n_samples, n_features) or (n_samples,)
+          for single-feature data.
+        Returns:
+        - self
+        Raises:
+        - ValueError: If chunk has wrong number of features or is empty.
+        """
+        X_chunk = np.asarray(X_chunk, dtype=float)
+
+        if X_chunk.ndim == 1:
+            X_chunk = X_chunk.reshape(-1, 1)
+
+        if X_chunk.shape[0] == 0:
+            raise ValueError("X_chunk must not be empty.")
+
+        if X_chunk.shape[1] != self.n_features:
+            raise ValueError(
+                f"Expected {self.n_features} features, got {X_chunk.shape[1]}."
+            )
+
+        for j in range(self.n_features):
+            col = X_chunk[:, j]
+            col = col[~np.isnan(col)]
+
+            if col.size == 0:
+                continue
+
+            for x in col:
+                self._n[j] += 1
+                delta = x - self._mean[j]
+                self._mean[j] += delta / self._n[j]
+                delta2 = x - self._mean[j]
+                self._M2[j] += delta * delta2
+
+            self._min[j] = np.minimum(self._min[j], np.min(col))
+            self._max[j] = np.maximum(self._max[j], np.max(col))
+
+            if self.window_size is not None:
+                self._buffer[j].extend(col.tolist())
+                self._buffer[j] = self._buffer[j][-self.window_size:]
+            else:
+                self._buffer[j].extend(col.tolist())
+
+        return self
+
+    def result(self):
+        """
+        Return a dict of current streaming statistics per feature.
+        Returns:
+        - dict with keys: 'mean', 'variance', 'std', 'min', 'max',
+          'quantiles' (0.25, 0.5, 0.75), 'histogram' (counts, edges).
+          Each value is an np.ndarray of length n_features.
+        Raises:
+        - ValueError: If no data has been ingested yet.
+        """
+        if np.all(self._n == 0):
+            raise ValueError("No data ingested yet. Call update_stats() first.")
+
+        variance = np.where(
+            self._n > 1, self._M2 / (self._n - 1), 0.0
+        )
+
+        quantiles = np.zeros((self.n_features, 3))
+        histograms = []
+
+        for j in range(self.n_features):
+            buf = np.array(self._buffer[j], dtype=float)
+            if buf.size > 0:
+                quantiles[j] = np.array([
+                    percentile(buf, 25),
+                    percentile(buf, 50),
+                    percentile(buf, 75),
+                ])
+                counts, edges = np.histogram(buf, bins=self.bins)
+                histograms.append((counts, edges))
+            else:
+                quantiles[j] = np.array([np.nan, np.nan, np.nan])
+                histograms.append((np.array([]), np.array([])))
+
+        return {
+            "mean": self._mean.copy(),
+            "variance": variance,
+            "std": np.sqrt(variance),
+            "min": self._min.copy(),
+            "max": self._max.copy(),
+            "quantiles": quantiles,
+            "histograms": histograms,
+        }
+
+    def reset(self):
+        """
+        Reset all accumulated statistics.
+        Returns:
+        - self
+        """
+        self._n = np.zeros(self.n_features, dtype=float)
+        self._mean = np.zeros(self.n_features, dtype=float)
+        self._M2 = np.zeros(self.n_features, dtype=float)
+        self._min = np.full(self.n_features, np.inf)
+        self._max = np.full(self.n_features, -np.inf)
+        self._buffer = [[] for _ in range(self.n_features)]
+        return self

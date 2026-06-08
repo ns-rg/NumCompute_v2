@@ -1,9 +1,9 @@
-from numcompute.preprocessing import Imputer
+from numcompute_stream.preprocessing import Imputer
 import numpy as np
 
-from tests.test_io import test_load_csv_basic, test_missing_values
-from numcompute.preprocessing import StandardScaler
-from numcompute.preprocessing import OneHotEncoder
+from tests.original.test_io import test_load_csv_basic, test_missing_values
+from numcompute_stream.preprocessing import StandardScaler
+from numcompute_stream.preprocessing import OneHotEncoder
 
 
 def test_imputer():

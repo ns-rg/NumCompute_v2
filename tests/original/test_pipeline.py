@@ -1,5 +1,5 @@
-from numcompute.pipeline import Pipeline
-from numcompute.preprocessing import Imputer, StandardScaler
+from numcompute_stream.pipeline import Pipeline
+from numcompute_stream.preprocessing import Imputer, StandardScaler
 import numpy as np
 
 def test_pipeline():

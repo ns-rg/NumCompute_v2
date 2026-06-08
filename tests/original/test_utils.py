@@ -1,5 +1,5 @@
 import numpy as np
-from numcompute.utils import sigmoid, softmax, logsumexp
+from numcompute_stream.utils import sigmoid, softmax, logsumexp
 
 def test_sigmoid():
     """Test the sigmoid function with a simple input."""

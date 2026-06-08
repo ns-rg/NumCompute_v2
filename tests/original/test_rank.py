@@ -1,5 +1,5 @@
 import numpy as np
-from numcompute.rank import rank, percentile
+from numcompute_stream.rank import rank, percentile
 
 def test_rank_average():
     """Test the rank function with the "average" method."""

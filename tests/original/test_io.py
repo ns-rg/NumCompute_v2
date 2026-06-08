@@ -1,5 +1,5 @@
 import numpy as np
-from numcompute.io import load_csv
+from numcompute_stream.io import load_csv
 
 def test_load_csv_basic():
     """

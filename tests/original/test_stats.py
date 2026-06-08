@@ -1,5 +1,5 @@
 import numpy as np
-from numcompute.stats import mean, std, min, max, histogram, quantile
+from numcompute_stream.stats import mean, std, min, max, histogram, quantile
 
 def test_mean():
     """Test the mean function with a simple list of numbers."""
